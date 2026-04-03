@@ -1,51 +1,56 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { Todo, TodoDocument } from './schemas/todo.schema';
 
-export interface Todo {
-    id: number;
-    title: string;
-    description?: string;
-    isDone: boolean;
-    createdAt: Date;
-}
+// export interface Todo {
+//     id: number;
+//     title: string;
+//     description?: string;
+//     isDone: boolean;
+//     createdAt: Date;
+// }
 
 @Injectable()
 export class TodoService {
-    private todos: Todo[] = [];
-    private nextId = 1;
+    
+    constructor(@InjectModel(Todo.name) private todoModel: Model<TodoDocument>) {}
 
-    findAll(): Todo[] {
-        return this.todos;
+    async findAll(): Promise<TodoDocument[]> {
+        return this.todoModel.find().exec();
     }
 
-    findOne(id: number): Todo | undefined {
-        return this.todos.find((todo) => todo.id === id);
-    }
+    async findOne(id: string): Promise<TodoDocument> {
+        const todo = await this.todoModel.findById(id).exec();
 
-    create(data: { title: string; description?: string }): Todo {
-        const newTodo: Todo = {
-            id: this.nextId++,
-            title: data.title,
-            description: data.description,
-            isDone: false,
-            createdAt: new Date(),
-        };
-        this.todos.push(newTodo);
-        return newTodo;
-    }
+        if(!todo){
+            throw new NotFoundException(`Todo with id '${id}' not found`);
+        }
 
-    update(id: number, data: Partial<Todo>): Todo | null {
-        const todo = this.findOne(id);
-        if (!todo) return null;
-
-        Object.assign(todo, data);
         return todo;
     }
 
-    remove(id: number): boolean {
-        const index = this.todos.findIndex((todo) => todo.id === id);
-        if (index === -1) return false;
+    async create(data: { title: string; description?: string }): Promise<TodoDocument> {
+        const newTodo = new this.todoModel(data);
+        return newTodo.save();
+    }
 
-        this.todos.splice(index, 1);
-        return true;
+    async update(id: string, data: { title?:string; description?: string; isDone?: boolean; } ): Promise<TodoDocument> {
+        const updated = await this.todoModel.findByIdAndUpdate(id, data, { new:true }).exec();
+        
+        if(!updated){
+            throw new NotFoundException(`Todo with id '${id}' not found`);
+        }
+        
+        return updated;
+    }
+
+    async remove(id: string): Promise<void> {
+        const result = await this.todoModel.findByIdAndDelete(id).exec;
+        
+        if(!result){
+            throw new NotFoundException(`Todo with id '${id}' not found`);
+        }
+
     }
 }

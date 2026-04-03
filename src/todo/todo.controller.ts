@@ -12,12 +12,7 @@ export class TodoController {
 
     @Get(':id')
     findOne(@Param('id') id: string) {
-        const todo = this.todoService.findOne(+id)
-        if (!todo) {
-            throw new NotFoundException(`Task with ${id} id not found`);
-        }
-
-        return todo;
+        return this.todoService.findOne(id);
     }
 
     @Post()
@@ -28,21 +23,12 @@ export class TodoController {
 
     @Put(':id')
     update(@Param('id') id: string, @Body() body: { title?: string; description?: string; isDone?: boolean }) {
-        const updated = this.todoService.update(+id, body);
-        if (!updated) {
-            throw new NotFoundException(`Task with ${id} not found`);
-        }
-
-        return updated;
+        return this.todoService.update(id, body);
     }
 
     @Delete(':id')
     @HttpCode(HttpStatus.NO_CONTENT)
     remove(@Param('id') id: string) {
-        const deleted = this.todoService.remove(+id);
-
-        if (!deleted) {
-            throw new NotFoundException(`Todo with id ${id} not found`);
-        }
+        return this.todoService.remove(id);
     }
 }
