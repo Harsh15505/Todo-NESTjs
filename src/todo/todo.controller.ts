@@ -1,5 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, HttpCode, HttpStatus, NotFoundException } from '@nestjs/common';
 import { TodoService } from './todo.service';
+import { CreateTodoDto } from './dto/create-todo.dto';
+import { UpdateTodoDto } from './dto/update-todo.dto';
 
 @Controller('todo')
 export class TodoController {
@@ -12,37 +14,23 @@ export class TodoController {
 
     @Get(':id')
     findOne(@Param('id') id: string) {
-        const todo = this.todoService.findOne(+id)
-        if (!todo) {
-            throw new NotFoundException(`Task with ${id} id not found`);
-        }
-
-        return todo;
+        return this.todoService.findOne(id);
     }
 
     @Post()
     @HttpCode(HttpStatus.CREATED)
-    create(@Body() body: { title: string, description?: string }) {
-        return this.todoService.create(body);
+    create(@Body() createTodoDto: CreateTodoDto) {
+        return this.todoService.create(createTodoDto);
     }
 
     @Put(':id')
-    update(@Param('id') id: string, @Body() body: { title?: string; description?: string; isDone?: boolean }) {
-        const updated = this.todoService.update(+id, body);
-        if (!updated) {
-            throw new NotFoundException(`Task with ${id} not found`);
-        }
-
-        return updated;
+    update(@Param('id') id: string, @Body() updateTodoDto: UpdateTodoDto) {
+        return this.todoService.update(id, updateTodoDto);
     }
 
     @Delete(':id')
     @HttpCode(HttpStatus.NO_CONTENT)
     remove(@Param('id') id: string) {
-        const deleted = this.todoService.remove(+id);
-
-        if (!deleted) {
-            throw new NotFoundException(`Todo with id ${id} not found`);
-        }
+        return this.todoService.remove(id);
     }
 }
