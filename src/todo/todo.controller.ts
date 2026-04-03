@@ -1,5 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, HttpCode, HttpStatus, NotFoundException } from '@nestjs/common';
 import { TodoService } from './todo.service';
+import { CreateTodoDto } from './dto/create-todo.dto';
+import { UpdateTodoDto } from './dto/update-todo.dto';
 
 @Controller('todo')
 export class TodoController {
@@ -17,13 +19,13 @@ export class TodoController {
 
     @Post()
     @HttpCode(HttpStatus.CREATED)
-    create(@Body() body: { title: string, description?: string }) {
-        return this.todoService.create(body);
+    create(@Body() createTodoDto: CreateTodoDto) {
+        return this.todoService.create(createTodoDto);
     }
 
     @Put(':id')
-    update(@Param('id') id: string, @Body() body: { title?: string; description?: string; isDone?: boolean }) {
-        return this.todoService.update(id, body);
+    update(@Param('id') id: string, @Body() updateTodoDto: UpdateTodoDto) {
+        return this.todoService.update(id, updateTodoDto);
     }
 
     @Delete(':id')
