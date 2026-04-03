@@ -13,5 +13,5 @@ export class UpdateTodoDto{
 
     @IsOptional()
     @IsBoolean()
-    isDone?:boolean;
+    completed?:boolean;
 }
