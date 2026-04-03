@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { HydratedDocument } from "mongoose";
+import { HydratedDocument, Types } from "mongoose";
 
 export type TodoDocument = HydratedDocument<Todo>;
 
@@ -17,6 +17,8 @@ export class Todo{
     @Prop({ default: false })
     completed: boolean;
 
+    @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+    userId: Types.ObjectId;
 }
 
 export const TodoSchema = SchemaFactory.createForClass(Todo);
