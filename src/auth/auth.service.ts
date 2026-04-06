@@ -2,15 +2,17 @@ import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
+import { RegisterDto } from './dto/register.dto';
 
 @Injectable()
 export class AuthService {
     constructor(
         private readonly usersService: UsersService,
         private readonly jwtService: JwtService,
-    ) {}
+    ) { }
 
-    async register(email: string, password: string) {
+    async register(registerDto: RegisterDto) {
+        const { email, password } = registerDto;
         const existingUser = await this.usersService.findByEmail(email);
 
         if (existingUser) {
