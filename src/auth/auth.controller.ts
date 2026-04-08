@@ -18,7 +18,7 @@ export class AuthController {
   @Public()
   @UseGuards(LocalAuthGuard)
   @Post('login')
-  login(@Body() _dto: LoginDto, @Request() req: any) {
+  login(@Request() req: any) {
     return this.authService.login(req.user);
   }
 }
