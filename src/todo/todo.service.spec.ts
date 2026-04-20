@@ -1,49 +1,68 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { TodoService } from './todo.service';
 import { Todo } from './schemas/todo.schema';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
+import { CaslAbilityFactory } from '../casl/casl-ability.factory';
+import { JwtUser } from '../auth/decorators/current-user.decorator';
 
 const mockUserId = new Types.ObjectId().toHexString();
 const mockTodoId = new Types.ObjectId().toHexString();
+const mockOtherUserId = new Types.ObjectId().toHexString();
+const mockAdminUserId = new Types.ObjectId().toHexString();
 
-const mockTodo = {
+const mockOwnerUser: JwtUser = { userId: mockUserId, email: 'owner@example.com', role: 'user' };
+const mockAdminUser: JwtUser = { userId: mockAdminUserId, email: 'admin@example.com', role: 'admin' };
+const mockOtherUser: JwtUser = { userId: mockOtherUserId, email: 'other@example.com', role: 'user' };
+
+const buildMockTodo = () => ({
   _id: mockTodoId,
   title: 'Learn Unit Testing',
   description: 'Write tests for Todo app',
   completed: false,
   userId: new Types.ObjectId(mockUserId),
+  toObject: () => ({
+    _id: mockTodoId,
+    title: 'Learn Unit Testing',
+    completed: false,
+    userId: new Types.ObjectId(mockUserId),
+  }),
   created_at: new Date(),
   updated_at: new Date(),
-};
-
-const mockTodoModel = {
-  find: jest.fn().mockReturnValue({
-    sort: jest.fn().mockReturnValue({
-      exec: jest.fn().mockResolvedValue([mockTodo]),
-    }),
-  }),
-  findOne: jest.fn().mockReturnValue({
-    exec: jest.fn().mockResolvedValue(mockTodo),
-  }),
-  findOneAndUpdate: jest.fn().mockReturnValue({
-    exec: jest.fn().mockResolvedValue({ ...mockTodo, completed: true }),
-  }),
-  findOneAndDelete: jest.fn().mockReturnValue({
-    exec: jest.fn().mockResolvedValue(mockTodo),
-  }),
-};
+});
 
 describe('TodoService', () => {
   let service: TodoService;
+  let caslFactory: CaslAbilityFactory;
+  let mockTodoModel: any;
 
   beforeEach(async () => {
+    const mockTodo = buildMockTodo();
+
+    mockTodoModel = {
+      find: jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue([mockTodo]),
+        }),
+      }),
+      findById: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockTodo),
+      }),
+      findByIdAndUpdate: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ ...mockTodo, completed: true }),
+      }),
+      findByIdAndDelete: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockTodo),
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TodoService,
+        CaslAbilityFactory,
         {
           provide: getModelToken(Todo.name),
           useValue: mockTodoModel,
@@ -52,10 +71,7 @@ describe('TodoService', () => {
     }).compile();
 
     service = module.get<TodoService>(TodoService);
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
+    caslFactory = module.get<CaslAbilityFactory>(CaslAbilityFactory);
   });
 
   it('should be defined', () => {
@@ -63,58 +79,37 @@ describe('TodoService', () => {
   });
 
   describe('findAll', () => {
-    it('should return an array of todos for the user', async () => {
-      const result = await service.findAll(mockUserId);
-      expect(result).toEqual([mockTodo]);
-      expect(mockTodoModel.find).toHaveBeenCalledWith({
-        userId: new Types.ObjectId(mockUserId),
-      });
-      expect(mockTodoModel.find).toHaveBeenCalledTimes(1);
+    it('should return all todos', async () => {
+      const result = await service.findAll();
+      expect(Array.isArray(result)).toBe(true);
+      expect(mockTodoModel.find).toHaveBeenCalled();
     });
 
-    it('should return empty array when user has no todos', async () => {
+    it('should return empty array when no todos exist', async () => {
       mockTodoModel.find.mockReturnValueOnce({
         sort: jest.fn().mockReturnValue({
           exec: jest.fn().mockResolvedValue([]),
         }),
       });
-      const result = await service.findAll(mockUserId);
+      const result = await service.findAll();
       expect(result).toEqual([]);
-      expect(result).toHaveLength(0);
     });
   });
 
   describe('findOne', () => {
-    it('should return a todo when found', async () => {
-      const result = await service.findOne(mockTodoId, mockUserId);
-      expect(result).toEqual(mockTodo);
-      expect(mockTodoModel.findOne).toHaveBeenCalledWith({
-        _id: mockTodoId,
-        userId: new Types.ObjectId(mockUserId),
-      });
+    it('should return a todo by id', async () => {
+      const result = await service.findOne(mockTodoId);
+      expect(result._id).toBe(mockTodoId);
+      expect(mockTodoModel.findById).toHaveBeenCalledWith(mockTodoId);
     });
 
     it('should throw NotFoundException when todo is not found', async () => {
-      mockTodoModel.findOne.mockReturnValueOnce({
+      mockTodoModel.findById.mockReturnValueOnce({
         exec: jest.fn().mockResolvedValue(null),
       });
-      await expect(
-        service.findOne('nonexistent-id', mockUserId)
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('should NOT return another user\'s todo (security test)', async () => {
-      mockTodoModel.findOne.mockReturnValueOnce({
-        exec: jest.fn().mockResolvedValue(null),
-      });
-      const differentUserId = new Types.ObjectId().toHexString();
-      await expect(
-        service.findOne(mockTodoId, differentUserId)
-      ).rejects.toThrow(NotFoundException);
-      expect(mockTodoModel.findOne).toHaveBeenCalledWith({
-        _id: mockTodoId,
-        userId: new Types.ObjectId(differentUserId),
-      });
+      await expect(service.findOne('nonexistent-id')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -124,6 +119,7 @@ describe('TodoService', () => {
         title: 'Buy groceries',
         description: 'Milk and eggs',
       };
+      const mockTodo = buildMockTodo();
       const saveMock = jest.fn().mockResolvedValue(mockTodo);
       (service as any).todoModel = jest.fn().mockImplementation(() => ({
         save: saveMock,
@@ -131,94 +127,74 @@ describe('TodoService', () => {
       const result = await service.create(createDto, mockUserId);
       expect(result).toEqual(mockTodo);
       expect(saveMock).toHaveBeenCalledTimes(1);
-      expect((service as any).todoModel).toHaveBeenCalledWith({
-        ...createDto,
-        userId: new Types.ObjectId(mockUserId),
-      });
-    });
-
-    it('should create a todo without description', async () => {
-      const createDto: CreateTodoDto = {
-        title: 'Minimal todo',
-      };
-      const saveMock = jest.fn().mockResolvedValue({ ...mockTodo, description: undefined });
-      (service as any).todoModel = jest.fn().mockImplementation(() => ({ save: saveMock }));
-      const result = await service.create(createDto, mockUserId);
-      expect(result.title).toBe(mockTodo.title);
-      expect(saveMock).toHaveBeenCalled();
     });
   });
 
   describe('update', () => {
-    it('should update and return the updated todo', async () => {
+    it('should update and return the todo when owner calls it', async () => {
       const updateDto: UpdateTodoDto = { completed: true };
-      const updatedMock = { ...mockTodo, completed: true };
-      mockTodoModel.findOneAndUpdate.mockReturnValueOnce({
-        exec: jest.fn().mockResolvedValue(updatedMock),
-      });
-      const result = await service.update(mockTodoId, updateDto, mockUserId);
-      expect(result).toEqual(updatedMock);
+      const ability = caslFactory.defineAbilityFor(mockOwnerUser);
+      const result = await service.update(mockTodoId, updateDto, ability);
       expect(result.completed).toBe(true);
-      expect(mockTodoModel.findOneAndUpdate).toHaveBeenCalledWith(
-        { _id: mockTodoId, userId: new Types.ObjectId(mockUserId) },
+      expect(mockTodoModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        mockTodoId,
         updateDto,
         { new: true },
       );
     });
 
-    it('should throw NotFoundException when todo to update is not found', async () => {
-      mockTodoModel.findOneAndUpdate.mockReturnValueOnce({
+    it('should throw NotFoundException when todo does not exist', async () => {
+      mockTodoModel.findById.mockReturnValueOnce({
         exec: jest.fn().mockResolvedValue(null),
       });
-      const updateDto: UpdateTodoDto = { completed: true };
+      const ability = caslFactory.defineAbilityFor(mockOwnerUser);
       await expect(
-        service.update('nonexistent-id', updateDto, mockUserId)
+        service.update('nonexistent-id', { completed: true }, ability),
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('should not update another user\'s todo', async () => {
-      mockTodoModel.findOneAndUpdate.mockReturnValueOnce({
-        exec: jest.fn().mockResolvedValue(null),
-      });
-      const differentUser = new Types.ObjectId().toHexString();
-      const updateDto: UpdateTodoDto = { title: 'Hacked title' };
+    it('should throw ForbiddenException when a user tries to update another user todo', async () => {
+      const ability = caslFactory.defineAbilityFor(mockOtherUser);
       await expect(
-        service.update(mockTodoId, updateDto, differentUser)
-      ).rejects.toThrow(NotFoundException);
+        service.update(mockTodoId, { title: 'Hacked' }, ability),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should allow admin to update any todo', async () => {
+      const updateDto: UpdateTodoDto = { completed: true };
+      const ability = caslFactory.defineAbilityFor(mockAdminUser);
+      const result = await service.update(mockTodoId, updateDto, ability);
+      expect(result.completed).toBe(true);
     });
   });
 
   describe('remove', () => {
-    it('should delete a todo and return void', async () => {
-      mockTodoModel.findOneAndDelete.mockReturnValueOnce({
-        exec: jest.fn().mockResolvedValue(mockTodo),
-      });
-      await expect(
-        service.remove(mockTodoId, mockUserId)
-      ).resolves.toBeUndefined();
-      expect(mockTodoModel.findOneAndDelete).toHaveBeenCalledWith({
-        _id: mockTodoId,
-        userId: new Types.ObjectId(mockUserId),
-      });
+    it('should delete a todo when owner calls it', async () => {
+      const ability = caslFactory.defineAbilityFor(mockOwnerUser);
+      await expect(service.remove(mockTodoId, ability)).resolves.toBeUndefined();
+      expect(mockTodoModel.findByIdAndDelete).toHaveBeenCalledWith(mockTodoId);
     });
 
-    it('should throw NotFoundException when todo to delete is not found', async () => {
-      mockTodoModel.findOneAndDelete.mockReturnValueOnce({
+    it('should throw NotFoundException when todo does not exist', async () => {
+      mockTodoModel.findById.mockReturnValueOnce({
         exec: jest.fn().mockResolvedValue(null),
       });
-      await expect(
-        service.remove('ghost-id', mockUserId)
-      ).rejects.toThrow(NotFoundException);
+      const ability = caslFactory.defineAbilityFor(mockOwnerUser);
+      await expect(service.remove('ghost-id', ability)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
-    it('should not delete another user\'s todo', async () => {
-      mockTodoModel.findOneAndDelete.mockReturnValueOnce({
-        exec: jest.fn().mockResolvedValue(null),
-      });
-      const differentUser = new Types.ObjectId().toHexString();
-      await expect(
-        service.remove(mockTodoId, differentUser)
-      ).rejects.toThrow(NotFoundException);
+    it('should throw ForbiddenException when a user tries to delete another user todo', async () => {
+      const ability = caslFactory.defineAbilityFor(mockOtherUser);
+      await expect(service.remove(mockTodoId, ability)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('should allow admin to delete any todo', async () => {
+      const ability = caslFactory.defineAbilityFor(mockAdminUser);
+      await expect(service.remove(mockTodoId, ability)).resolves.toBeUndefined();
     });
   });
 });

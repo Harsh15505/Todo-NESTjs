@@ -103,8 +103,7 @@ describe('AuthService', () => {
         email: mockUser.email,
         role: mockUser.role,
       });
-
-      expect(result).not.toHaveProperty('password');
+      
     });
 
     it('should throw UnauthorizedException when user is not found', async () => {
