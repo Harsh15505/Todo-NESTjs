@@ -26,41 +26,41 @@ export class TodoController {
   constructor(
     private readonly todoService: TodoService,
     private readonly caslAbilityFactory: CaslAbilityFactory,
-  ) {}
+  ) { }
 
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, 'Todo'))
-  findAll() {
-    return this.todoService.findAll();
+  async findAll() {
+    return await this.todoService.findAll();
   }
 
   @Get(':id')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Todo'))
-  findOne(@Param('id') id: string) {
-    return this.todoService.findOne(id);
+  async findOne(@Param('id') id: string) {
+    return await this.todoService.findOne(id);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @CheckPolicies((ability) => ability.can(Action.Create, 'Todo'))
-  create(@Body() createTodoDto: CreateTodoDto, @CurrentUser() user: JwtUser) {
-    return this.todoService.create(createTodoDto, user.userId);
+  async create(@Body() createTodoDto: CreateTodoDto, @CurrentUser() user: JwtUser) {
+    return await this.todoService.create(createTodoDto, user.userId);
   }
 
   @Put(':id')
-  update(
+  async update(
     @Param('id') id: string,
     @Body() updateTodoDto: UpdateTodoDto,
     @CurrentUser() user: JwtUser,
   ) {
     const ability = this.caslAbilityFactory.defineAbilityFor(user);
-    return this.todoService.update(id, updateTodoDto, ability);
+    return await this.todoService.update(id, updateTodoDto, ability);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+  async remove(@Param('id') id: string, @CurrentUser() user: JwtUser) {
     const ability = this.caslAbilityFactory.defineAbilityFor(user);
-    return this.todoService.remove(id, ability);
+    return await this.todoService.remove(id, ability);
   }
 }
