@@ -1,67 +1,94 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { subject } from '@casl/ability';
 import { Todo, TodoDocument } from './schemas/todo.schema';
+
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
+import { Action, AppAbility } from '../casl/casl.types';
 
 @Injectable()
 export class TodoService {
-    constructor(@InjectModel(Todo.name) private todoModel: Model<TodoDocument>) {}
+  constructor(
+    @InjectModel(Todo.name) private todoModel: Model<TodoDocument>,
+  ) {}
 
-    async findAll(userId: string): Promise<TodoDocument[]> {
-        return this.todoModel
-            .find({ userId: new Types.ObjectId(userId) })
-            .sort({ created_at: -1 })
-            .exec();
+  async findAll(): Promise<TodoDocument[]> {
+    return this.todoModel.find().sort({ created_at: -1 }).exec();
+  }
+
+  async findOne(id: string): Promise<TodoDocument> {
+    const todo = await this.todoModel.findById(id).exec();
+
+    if (!todo) {
+      throw new NotFoundException(`Todo with id '${id}' not found`);
     }
 
-    async findOne(id: string, userId: string): Promise<TodoDocument> {
-        const todo = await this.todoModel
-            .findOne({ _id: id, userId: new Types.ObjectId(userId) })
-            .exec();
+    return todo;
+  }
 
-        if (!todo) {
-            throw new NotFoundException(`Todo with id '${id}' not found`);
-        }
+  async create(
+    createTodoDto: CreateTodoDto,
+    userId: string,
+  ): Promise<TodoDocument> {
+    const newTodo = new this.todoModel({
+      ...createTodoDto,
+      userId: new Types.ObjectId(userId),
+    });
 
-        return todo;
+    return newTodo.save();
+  }
+
+  async update(
+    id: string,
+    updateTodoDto: UpdateTodoDto,
+    ability: AppAbility,
+  ): Promise<TodoDocument> {
+    const todo = await this.todoModel.findById(id).exec();
+
+    if (!todo) {
+      throw new NotFoundException(`Todo with id '${id}' not found`);
     }
 
-    async create(createTodoDto: CreateTodoDto, userId: string): Promise<TodoDocument> {
-        const newTodo = new this.todoModel({
-            ...createTodoDto,
-            userId: new Types.ObjectId(userId),
-        });
+    const plainTodo = subject('Todo', {
+      ...todo.toObject(),
+      userId: todo.userId.toString(),
+    } as any);
 
-        return newTodo.save();
+    if (!ability.can(Action.Update, plainTodo)) {
+      throw new ForbiddenException(
+        'You do not have permission to update this todo',
+      );
     }
 
-    async update(id: string, updateTodoDto: UpdateTodoDto, userId: string): Promise<TodoDocument> {
-        const updated = await this.todoModel
-            .findOneAndUpdate(
-                { _id: id, userId: new Types.ObjectId(userId) },
-                updateTodoDto,
-                { new: true },
-            )
-            .exec();
+    return this.todoModel
+      .findByIdAndUpdate(id, updateTodoDto, { new: true })
+      .exec() as Promise<TodoDocument>;
+  }
 
-        if (!updated) {
-            throw new NotFoundException(`Todo with id '${id}' not found`);
-        }
+  async remove(id: string, ability: AppAbility): Promise<void> {
+    const todo = await this.todoModel.findById(id).exec();
 
-        return updated;
+    if (!todo) {
+      throw new NotFoundException(`Todo with id '${id}' not found`);
     }
 
-    async remove(id: string, userId: string): Promise<void> {
-        const result = await this.todoModel
-            .findOneAndDelete({ _id: id, userId: new Types.ObjectId(userId) })
-            .exec();
+    const plainTodo = subject('Todo', {
+      ...todo.toObject(),
+      userId: todo.userId.toString(),
+    } as any);
 
-        if (!result) {
-            throw new NotFoundException(`Todo with id '${id}' not found`);
+    if (!ability.can(Action.Delete, plainTodo)) {
+      throw new ForbiddenException(
+        'You do not have permission to delete this todo',
+      );
     }
 
-        return;
-    }
+    await this.todoModel.findByIdAndDelete(id).exec();
+  }
 }
